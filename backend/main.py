@@ -10,15 +10,37 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from bson import ObjectId
 from typing import List, Optional, Dict, Any
+from ai_analysis import AIAnalyzer
 
 load_dotenv()
+
+# Initialize AI Analyzer
+ai_analyzer = AIAnalyzer()
+
+def serialize_doc(doc: dict) -> dict:
+    """Convert MongoDB document to JSON-serializable dict (ObjectId → str)."""
+    out = {}
+    for k, v in doc.items():
+        if isinstance(v, ObjectId):
+            out[k] = str(v)
+        elif isinstance(v, datetime):
+            out[k] = v.isoformat()
+        else:
+            out[k] = v
+    return out
 
 app = FastAPI(title="AI Log Platform")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "*" # Fallback
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,9 +63,10 @@ async def health_check():
         mongo_ok = False
     
     try:
-        # Test Redis connection
-        import redis
-        redis_client = redis.Redis(host="localhost", port=6379, db=0)
+        # Test Redis connection — read from env, not hardcoded localhost
+        import redis as redis_lib
+        _redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_client = redis_lib.from_url(_redis_url, socket_connect_timeout=2)
         redis_client.ping()
         redis_ok = True
     except Exception:
@@ -79,7 +102,9 @@ async def upload_log(file: UploadFile = File(...)):
     
     # Process file in background
     content = await file.read()
-    await process_log_file.delay(job_id, content, file.filename)
+    # NOTE: Celery .delay() is synchronous — do NOT await it
+    from celery_worker import process_log_file
+    process_log_file.delay(job_id, content.decode("utf-8", errors="replace"), file.filename)
     
     return {
         "job_id": job_id,
@@ -152,7 +177,7 @@ async def get_logs(
     results = logs_collection.find(filter_query).skip(skip).limit(limit).sort("timestamp", -1)
     
     return {
-        "logs": [doc for doc in results],
+        "logs": [serialize_doc(doc) for doc in results],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -281,16 +306,34 @@ async def ask_ai(request: AskAIRequest):
                 yield f"data: {json.dumps({'token': token})}\n\n"
                 await asyncio.sleep(0.05)
 
-            # Send final result
-            result = {
-                "cause": cause,
-                "confidence": confidence,
-                "severity": severity,
-                "affected_services": services[:5],
-                "recommendation": recommendation,
-                "impact": f"{len(error_logs)} errors affecting {len(services)} service(s)",
-                "solution": "Review error logs and check service health dashboards"
-            }
+            # --- REAL AI ANALYSIS ---
+            # Use real AI Analyzer to get deep insights
+            try:
+                # Prepare logs for analysis string
+                log_texts = [f"[{l.get('level')}] {l.get('service')}: {l.get('message')}" for l in recent_logs[:10]]
+                analysis = await ai_analyzer.analyze_root_cause(log_texts)
+                
+                result = {
+                    "cause": analysis.get("cause", cause),
+                    "confidence": confidence,
+                    "severity": severity,
+                    "affected_services": services[:5],
+                    "recommendation": analysis.get("solution", recommendation),
+                    "impact": analysis.get("impact", f"{len(error_logs)} errors affecting {len(services)} service(s)"),
+                    "solution": analysis.get("solution", "Review error logs and check service health dashboards")
+                }
+            except Exception as ai_err:
+                print(f"AI Analysis error: {ai_err}")
+                result = {
+                    "cause": cause,
+                    "confidence": confidence,
+                    "severity": severity,
+                    "affected_services": services[:5],
+                    "recommendation": recommendation,
+                    "impact": f"{len(error_logs)} errors affecting {len(services)} service(s)",
+                    "solution": "Review error logs manually (AI service unavailable)"
+                }
+
             yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
 
         except Exception as e:
