@@ -7,45 +7,50 @@ import React from 'react';
 export default function StatCards({ analytics = {} }) {
   const stats = [
     {
-      label: 'Total Logs',
+      label: 'LOGS PROCESSED',
       value: analytics.total_logs || 0,
       icon: '📊',
-      color: 'text-blue-400',
+      glow: 'shadow-[0_0_15px_rgba(59,130,246,0.2)]',
     },
     {
-      label: 'Errors',
+      label: 'ERROR EVENTS',
       value: analytics.error_count || 0,
       icon: '❌',
-      color: 'text-red-400',
+      glow: 'shadow-[0_0_15px_rgba(244,63,94,0.2)]',
     },
     {
-      label: 'Anomalies',
+      label: 'ANOMALIES',
       value: analytics.anomaly_count || 0,
       icon: '⚠️',
-      color: 'text-yellow-400',
+      glow: 'shadow-[0_0_15px_rgba(245,158,11,0.2)]',
     },
     {
-      label: 'Error Rate',
+      label: 'FAILURE RATE',
       value: `${(analytics.error_rate || 0).toFixed(1)}%`,
       icon: '📈',
-      color: 'text-orange-400',
+      glow: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]',
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       {stats.map((stat, idx) => (
         <div
           key={idx}
-          className="bg-surface border border-border rounded-lg p-6 hover:border-accent transition"
+          className={`glass-card group relative overflow-hidden ${stat.glow}`}
         >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-3xl">{stat.icon}</span>
-            <span className={`text-xl font-bold ${stat.color}`}>
-              {stat.value}
-            </span>
+          <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity text-2xl">
+            {stat.icon}
           </div>
-          <p className="text-muted text-sm">{stat.label}</p>
+          <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">
+            {stat.label}
+          </p>
+          <h3 className="text-3xl font-bold font-mono tracking-tighter">
+            {stat.value}
+          </h3>
+          <div className="mt-4 w-full h-1 bg-white/5 rounded-full overflow-hidden">
+            <div className="h-full bg-accent w-2/3 group-hover:w-full transition-all duration-700 ease-out opacity-30" />
+          </div>
         </div>
       ))}
     </div>

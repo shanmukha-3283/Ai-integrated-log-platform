@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 from typing import List, Optional, Dict, Any
 from ai_analysis import AIAnalyzer
+from database import db, init_db
 
 load_dotenv()
 
@@ -46,20 +47,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize MongoDB
-client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017/"))
-db = client["log_platform"]
-jobs_collection = db["jobs"]
-logs_collection = db["logs"]
+@app.on_event("startup")
+async def startup_event():
+    """Run core startup tasks"""
+    await init_db()
+
+# Reference collections through the shared database instance
+jobs_collection = db.db["jobs"]
+logs_collection = db.db["logs"]
 
 @app.get("/health")
 async def health_check():
     """Check if services are running"""
     try:
-        # Test MongoDB connection
-        client.admin.command("ping")
+        # Test MongoDB connection via the shared client
+        await db.client.admin.command("ping")
         mongo_ok = True
-    except Exception:
+    except Exception as e:
+        print(f"Health check error: {e}")
         mongo_ok = False
     
     try:
@@ -116,7 +121,7 @@ async def upload_log(file: UploadFile = File(...)):
 @app.get("/jobs/{job_id}")
 async def get_job_status(job_id: str = Path(...)):
     """Customer checks their ticket status"""
-    job = jobs_collection.find_one({"job_id": job_id})
+    job = await jobs_collection.find_one({"job_id": job_id})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
@@ -171,10 +176,11 @@ async def get_logs(
     limit = page_size
     
     # Get total count
-    total = logs_collection.count_documents(filter_query)
+    total = await logs_collection.count_documents(filter_query)
     
     # Get paginated results
-    results = logs_collection.find(filter_query).skip(skip).limit(limit).sort("timestamp", -1)
+    cursor = logs_collection.find(filter_query).skip(skip).limit(limit).sort("timestamp", -1)
+    results = await cursor.to_list(length=limit)
     
     return {
         "logs": [serialize_doc(doc) for doc in results],
@@ -188,12 +194,12 @@ async def get_logs(
 async def get_analytics():
     """Generate analytics about log data"""
     # Total logs (last 24 hours)
-    total_logs = logs_collection.count_documents({
+    total_logs = await logs_collection.count_documents({
         "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
     })
     
     # Error count (level: ERROR)
-    error_count = logs_collection.count_documents({
+    error_count = await logs_collection.count_documents({
         "level": "ERROR",
         "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
     })
@@ -202,21 +208,22 @@ async def get_analytics():
     error_rate = round(error_count / total_logs * 100, 2) if total_logs > 0 else 0
     
     # Top 5 services by log count
-    top_services = logs_collection.aggregate([
+    top_services_cursor = logs_collection.aggregate([
         {"$match": {"timestamp": {"$gte": datetime.now() - timedelta(days=1)}}},
         {"$group": {"_id": "$service", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 5}
     ])
+    top_services = await top_services_cursor.to_list(length=5)
     
     # Anomalies (score >= 0.7)
-    anomaly_count = logs_collection.count_documents({
+    anomaly_count = await logs_collection.count_documents({
         "anomaly_score": {"$gte": 0.7},
         "timestamp": {"$gte": datetime.now() - timedelta(days=1)}
     })
     
     # Hourly breakdown (last 12 hours)
-    hourly_breakdown = logs_collection.aggregate([
+    hourly_breakdown_cursor = logs_collection.aggregate([
         {"$match": {"timestamp": {"$gte": datetime.now() - timedelta(hours=12)}}},
         {"$group": {
             "_id": {"$dateToString": {"format": "%H", "date": "$timestamp"}},
@@ -224,6 +231,7 @@ async def get_analytics():
         }},
         {"$sort": {"_id": 1}}
     ])
+    hourly_breakdown = await hourly_breakdown_cursor.to_list(length=12)
     
     return {
         "total_logs": total_logs,
@@ -247,6 +255,7 @@ async def analyze_logs():
 class AskAIRequest(BaseModel):
     query: str
     log_ids: List[str] = []
+    model: str = "gpt-4o"
 
 
 @app.post("/ask-ai")
@@ -254,6 +263,7 @@ async def ask_ai(request: AskAIRequest):
     """AI-powered log analysis with SSE streaming response"""
     query = request.query
     log_ids = request.log_ids
+    model_choice = request.model
 
     async def event_stream():
         try:
@@ -262,76 +272,46 @@ async def ask_ai(request: AskAIRequest):
             if log_ids:
                 filter_query["_id"] = {"$in": [ObjectId(lid) for lid in log_ids]}
 
-            recent_logs = list(
-                logs_collection.find(filter_query)
-                .sort("timestamp", -1)
-                .limit(50)
-            )
+            cursor = logs_collection.find(filter_query).sort("timestamp", -1).limit(50)
+            recent_logs = await cursor.to_list(length=50)
 
-            # Build context from logs
+            # Build initial context
             error_logs = [l for l in recent_logs if l.get("level") == "ERROR"]
             warn_logs = [l for l in recent_logs if l.get("level") == "WARN"]
             services = list(set(l.get("service", "unknown") for l in recent_logs))
             anomalies = [l for l in recent_logs if (l.get("anomaly_score", 0) or 0) >= 0.7]
 
-            # Generate analysis based on log data
-            if error_logs:
-                cause = f"Found {len(error_logs)} error(s) in recent logs"
-                if error_logs[0].get("message"):
-                    cause += f". Most recent: {error_logs[0]['message'][:200]}"
-            elif warn_logs:
-                cause = f"Found {len(warn_logs)} warning(s) but no errors in recent logs"
-            else:
-                cause = "No errors or warnings detected in recent logs"
-
-            confidence = "HIGH" if len(error_logs) > 5 else "MEDIUM" if error_logs else "LOW"
-            severity = "CRITICAL" if len(error_logs) > 10 else "HIGH" if len(error_logs) > 3 else "MEDIUM"
-
-            if anomalies:
-                recommendation = f"Investigate {len(anomalies)} anomalous log entries with scores above 0.7. "
-            else:
-                recommendation = "No significant anomalies detected. "
-            recommendation += f"Query: {query}"
-
-            # Stream tokens
-            response_text = f"Analyzing logs for: {query}\n\n"
-            response_text += f"Found {len(recent_logs)} relevant log entries.\n"
-            response_text += f"Errors: {len(error_logs)}, Warnings: {len(warn_logs)}, Anomalies: {len(anomalies)}\n"
-            response_text += f"Services involved: {', '.join(services) if services else 'none'}\n"
-
-            # Stream tokens one by one
+            # Initial summary for streaming
+            response_text = f"Neural Link established. Routing inquiry to {model_choice}...\n"
+            response_text += f"Analyzing {len(recent_logs)} transmission logs across {len(services)} services.\n"
+            
             words = response_text.split(" ")
             for word in words:
-                token = word + " "
-                yield f"data: {json.dumps({'token': token})}\n\n"
-                await asyncio.sleep(0.05)
+                yield f"data: {json.dumps({'token': word + ' '})}\n\n"
+                await asyncio.sleep(0.04)
 
             # --- REAL AI ANALYSIS ---
-            # Use real AI Analyzer to get deep insights
             try:
-                # Prepare logs for analysis string
-                log_texts = [f"[{l.get('level')}] {l.get('service')}: {l.get('message')}" for l in recent_logs[:10]]
-                analysis = await ai_analyzer.analyze_root_cause(log_texts)
+                log_texts = [f"[{l.get('level')}] {l.get('service')}: {l.get('message')}" for l in recent_logs[:15]]
+                analysis = await ai_analyzer.analyze_root_cause(log_texts, model=model_choice)
                 
                 result = {
-                    "cause": analysis.get("cause", cause),
-                    "confidence": confidence,
-                    "severity": severity,
-                    "affected_services": services[:5],
-                    "recommendation": analysis.get("solution", recommendation),
-                    "impact": analysis.get("impact", f"{len(error_logs)} errors affecting {len(services)} service(s)"),
-                    "solution": analysis.get("solution", "Review error logs and check service health dashboards")
+                    "cause": analysis.get("cause", "Analysis inconclusive"),
+                    "confidence": analysis.get("confidence", "MEDIUM"),
+                    "severity": analysis.get("severity", "MEDIUM"),
+                    "affected_services": analysis.get("affected_services", services[:3]),
+                    "recommendation": analysis.get("recommendation", "Review system health monitors."),
+                    "impact": analysis.get("impact", "Service degradation likely."),
+                    "solution": analysis.get("solution", "Manual inspection required.")
                 }
             except Exception as ai_err:
-                print(f"AI Analysis error: {ai_err}")
+                print(f"AI error: {ai_err}")
                 result = {
-                    "cause": cause,
-                    "confidence": confidence,
-                    "severity": severity,
-                    "affected_services": services[:5],
-                    "recommendation": recommendation,
-                    "impact": f"{len(error_logs)} errors affecting {len(services)} service(s)",
-                    "solution": "Review error logs manually (AI service unavailable)"
+                    "cause": "AI subsystem busy or unavailable.",
+                    "confidence": "LOW",
+                    "severity": "HIGH",
+                    "recommendation": "Try a different model or check API quota.",
+                    "solution": "Check backend .env for valid OPENAI_API_KEY."
                 }
 
             yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
@@ -345,8 +325,8 @@ async def ask_ai(request: AskAIRequest):
 @app.post("/stream")
 async def stream_logs():
     """Stream logs in real-time"""
-    def event_stream():
-        for doc in logs_collection.find().sort("timestamp", -1).limit(10):
-            yield f"data: {json.dumps(doc)}\n\n"
+    async def event_stream():
+        async for doc in logs_collection.find().sort("timestamp", -1).limit(10):
+            yield f"data: {json.dumps(serialize_doc(doc))}\n\n"
     
     return StreamingResponse(event_stream(), media_type="text/event-stream")

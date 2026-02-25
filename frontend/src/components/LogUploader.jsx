@@ -1,20 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { uploadLog, getJob } from '../api/client';
 
-/**
- * Key React Concept: useEffect with setInterval for polling — always clear 
- * the interval in the cleanup function or it will keep running after the 
- * component unmounts.
- */
 export default function LogUploader({ onComplete }) {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("Queued");
   const [progress, setProgress] = useState(0);
   const [jobId, setJobId] = useState(null);
   const [displayText, setDisplayText] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const intervalRef = useRef(null);
 
-  // Poll job status every 2 seconds when processing
   useEffect(() => {
     if (status === "Processing" && jobId) {
       intervalRef.current = setInterval(async () => {
@@ -23,12 +18,12 @@ export default function LogUploader({ onComplete }) {
           if (job.status === "completed") {
             setStatus("Completed");
             setProgress(100);
-            setDisplayText(`Done! ${job.processed_count || 0} logs processed.`);
+            setDisplayText(`Successfully processed ${job.processed_count || 0} logs.`);
             clearInterval(intervalRef.current);
             if (onComplete) onComplete();
           } else if (job.status === "failed") {
             setStatus("Failed");
-            setDisplayText(`Error: ${job.error || "Unknown error"}`);
+            setDisplayText(`Processing failed: ${job.error || "Unknown error"}`);
             clearInterval(intervalRef.current);
           }
         } catch (error) {
@@ -55,6 +50,7 @@ export default function LogUploader({ onComplete }) {
 
   const handleDrop = (e) => {
     e.preventDefault();
+    setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
       setFile(droppedFile);
@@ -63,10 +59,6 @@ export default function LogUploader({ onComplete }) {
       setJobId(null);
       setDisplayText("");
     }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
   };
 
   const handleUpload = async () => {
@@ -82,7 +74,7 @@ export default function LogUploader({ onComplete }) {
       });
       setJobId(result.job_id);
       setStatus("Processing");
-      setDisplayText("Processing...");
+      setDisplayText("Analyzing log patterns...");
     } catch (error) {
       setStatus("Failed");
       setDisplayText(`Upload failed: ${error.message}`);
@@ -90,15 +82,17 @@ export default function LogUploader({ onComplete }) {
   };
 
   return (
-    <div className="mb-6">
+    <div className={`glass-card p-1 ${isDragging ? 'ring-2 ring-accent ring-offset-4 ring-offset-bg' : ''} transition-all duration-300`}>
       <div
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        className="border-2 border-dashed border-muted rounded-lg p-8 text-center hover:border-accent transition"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        className={`upload-zone px-8 py-12 text-center rounded-[0.9rem] ${isDragging ? 'active' : ''}`}
       >
-        <div className="mb-4">
-          <div className="text-lg font-semibold mb-2">📁 Upload Log File</div>
-          <p className="text-muted text-sm mb-4">Drag and drop or click to browse</p>
+        <div className="mb-6">
+          <div className="text-4xl mb-4 animate-float inline-block">🛸</div>
+          <h3 className="text-lg font-bold mb-1 tracking-tight">Transmission Uplink</h3>
+          <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-6 italic opacity-60">Upload system logs for AI scanning</p>
 
           <input
             type="file"
@@ -109,50 +103,57 @@ export default function LogUploader({ onComplete }) {
           />
           <label
             htmlFor="file-input"
-            className="inline-block cursor-pointer px-6 py-2 bg-accent text-surface rounded font-semibold hover:opacity-90 transition disabled:opacity-50"
+            className={`cursor-pointer px-8 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all ${status !== 'Queued' ? 'opacity-50 pointer-events-none' : ''}`}
           >
-            Choose File
+            Select System Log
           </label>
         </div>
 
-        {file && (
-          <div className="mt-4 p-4 bg-surface rounded border border-border">
-            <div className="text-sm text-muted mb-1">Selected:</div>
-            <div className="text-text font-semibold">
-              {file.name} ({(file.size / 1024).toFixed(2)} KB)
+        {file && status === "Queued" && (
+          <div className="max-w-md mx-auto p-4 bg-accent/5 rounded-xl border border-accent/20 animate-fadeIn">
+            <div className="flex items-center justify-between text-left">
+              <div>
+                <p className="text-[10px] font-bold text-accent uppercase tracking-wider mb-1">Target Identified</p>
+                <div className="text-sm font-mono truncate max-w-[200px]">{file.name}</div>
+              </div>
+              <div className="text-xs text-muted font-mono">{(file.size / 1024).toFixed(1)} KB</div>
             </div>
+            <button
+              onClick={handleUpload}
+              className="w-full mt-4 btn-primary text-sm uppercase tracking-widest"
+            >
+              Initiate Upload
+            </button>
           </div>
         )}
 
         {(status === "Uploading" || status === "Processing") && (
-          <div className="mt-4">
-            <div className="w-full bg-surface rounded-full h-2 overflow-hidden border border-border">
+          <div className="max-w-md mx-auto mt-6 animate-fadeIn">
+            <div className="flex justify-between items-end mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em]">{status}</span>
+              <span className="text-sm font-mono text-accent">{progress}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
               <div
-                className="bg-gradient-to-r from-accent to-blue-400 h-full transition-all duration-300"
+                className="h-full bg-gradient-to-r from-[#10b981] via-[#00d4ff] to-[#10b981] bg-[length:200%_100%] animate-loading transition-all duration-300"
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
-            <div className="text-sm text-accent mt-2 font-semibold">{progress}%</div>
+            <p className="text-[11px] text-muted italic mt-3">{displayText}</p>
           </div>
         )}
 
-        {displayText && (
-          <div className="mt-4 p-3 bg-surface rounded border border-border text-sm text-text">
-            {displayText}
+        {status === "Completed" && (
+          <div className="max-w-md mx-auto mt-6 p-4 bg-success/5 border border-success/20 rounded-xl animate-scaleIn">
+            <div className="flex items-center gap-3 text-success">
+              <span className="text-xl">✅</span>
+              <div className="text-left">
+                <p className="text-[10px] font-bold uppercase tracking-widest">Scanning Complete</p>
+                <p className="text-sm font-medium">{displayText}</p>
+              </div>
+            </div>
           </div>
         )}
-
-        <button
-          onClick={handleUpload}
-          disabled={!file || status !== "Queued"}
-          className="mt-4 px-6 py-2 bg-accent text-surface rounded font-semibold hover:opacity-90 disabled:opacity-50 transition"
-        >
-          {status === "Uploading"
-            ? `Uploading (${progress}%)...`
-            : status === "Processing"
-            ? "Processing..."
-            : "Upload"}
-        </button>
       </div>
     </div>
   );

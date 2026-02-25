@@ -6,7 +6,7 @@ import LogUploader from './components/LogUploader';
 import LogTable from './components/LogTable';
 import AskAI from './components/AskAI';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -97,61 +97,67 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-text">
+    <div className="min-h-screen bg-bg text-text relative overflow-hidden">
+      {/* Background Glow Orbs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#10b98110] rounded-full blur-[120px] pointer-events-none animate-float" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[35%] h-[35%] bg-[#00d4ff10] rounded-full blur-[100px] pointer-events-none animate-float" style={{ animationDelay: '-2s' }} />
+
       {/* Navbar */}
-      <nav className="bg-surface border-b border-border sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">⚡</span>
-            <h1 className="text-xl font-bold">AI Log Platform</h1>
+      <nav className="navbar">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              ⚡
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">AI Log Platform</h1>
+              <p className="text-[10px] text-muted uppercase tracking-[0.2em] font-semibold">Intelligent Observability</p>
+            </div>
           </div>
 
-          {/* Health indicator */}
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-block w-3 h-3 rounded-full ${health ? 'bg-success animate-pulse' : 'bg-error'
-                }`}
-            />
-            <span className="text-xs text-muted">Backend {health ? 'Online' : 'Offline'}</span>
-          </div>
-        </div>
+          <div className="flex items-center gap-8">
+            <div className="flex gap-2">
+              {[
+                { id: 'dashboard', label: 'Overview' },
+                { id: 'logs', label: 'Monitor' },
+                { id: 'askai', label: 'AI Analysis' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-        {/* Tabs */}
-        <div className="border-t border-border">
-          <div className="max-w-7xl mx-auto px-4 flex gap-0">
-            {[
-              { id: 'dashboard', label: 'Dashboard' },
-              { id: 'logs', label: 'Logs' },
-              { id: 'askai', label: 'Ask AI' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-3 border-b-2 transition ${activeTab === tab.id
-                  ? 'border-accent text-accent font-semibold'
-                  : 'border-transparent text-muted hover:text-text'
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+              <span
+                className={`w-2 h-2 rounded-full ${health ? 'bg-success shadow-[0_0_8px_#10b981] animate-pulse' : 'bg-error shadow-[0_0_8px_#f43f5e]'}`}
+              />
+              <span className="text-xs font-medium text-muted"> {health ? 'Live' : 'Offline'}</span>
+            </div>
           </div>
         </div>
       </nav>
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-10 relative z-10">
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
-          <div>
+          <div className="space-y-10">
             <StatCards analytics={analytics} />
-            <AnomalyChart data={analytics.hourly_data || []} />
+            <div className="glass-card">
+              <h2 className="text-lg font-bold mb-6">Log Frequency Trends</h2>
+              <AnomalyChart data={analytics.hourly_data || []} />
+            </div>
           </div>
         )}
 
         {/* Logs Tab */}
         {activeTab === 'logs' && (
-          <div className="space-y-6">
+          <div className="space-y-8 animate-fadeIn">
             <LogUploader onComplete={handleUploadComplete} />
             <LogTable
               logs={logs}
@@ -165,7 +171,11 @@ export default function App() {
         )}
 
         {/* Ask AI Tab */}
-        {activeTab === 'askai' && <AskAI />}
+        {activeTab === 'askai' && (
+          <div className="animate-fadeIn">
+            <AskAI />
+          </div>
+        )}
       </main>
     </div>
   );

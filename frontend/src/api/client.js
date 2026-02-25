@@ -63,8 +63,8 @@ export async function getAnalytics() {
  * @param {Function} onToken - Callback for each token received
  * @param {Function} onComplete - Callback when stream is done
  */
-export async function askAI(query, logIds = [], onToken = () => { }, onComplete = () => { }) {
-  const payload = { query, log_ids: logIds };
+export async function askAI(query, logIds = [], onToken = () => { }, onComplete = () => { }, model = 'gpt-4o') {
+  const payload = { query, log_ids: logIds, model };
 
   try {
     const response = await fetch(`${BASE_URL}/ask-ai`, {

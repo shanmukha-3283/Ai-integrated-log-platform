@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { askAI } from '../api/client';
 
-/**
- * Key React Concept: SSE streaming — instead of waiting for the full response,
- * we display tokens as they arrive, like watching someone type.
- */
 export default function AskAI() {
   const [query, setQuery] = useState('');
+  const [model, setModel] = useState('gpt-4o');
   const [response, setResponse] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  // const [tokens, setTokens] = useState([]);
+
+  const models = [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Fast & Intelligent' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', desc: 'Deep Analysis' },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5', desc: 'Efficiency' },
+  ];
 
   const handleAsk = async () => {
     if (!query.trim()) return;
@@ -31,23 +33,17 @@ export default function AskAI() {
         if (result.error) {
           setResponse(`Error: ${result.error}`);
         } else {
-          // Parse structured response if available
           if (typeof result === 'object') {
             setResponse(JSON.stringify(result, null, 2));
           } else {
             setResponse(result);
           }
         }
-      }
+      },
+      model // Pass the selected model
     );
   };
 
-  const handleClear = () => {
-    setQuery('');
-    setResponse('');
-  };
-
-  // Parse response as structured data if possible
   const parseResponse = (text) => {
     if (!text) return null;
     try {
@@ -60,135 +56,123 @@ export default function AskAI() {
   const parsed = parseResponse(response);
 
   return (
-    <div className="space-y-4">
-      <div className="bg-surface border border-border rounded-lg p-6">
-        <label className="block text-sm font-semibold mb-3 text-text">
-          Ask AI About Your Logs
-        </label>
+    <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn">
+      <div className="glass-card">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">Neural Link</h2>
+            <p className="text-[10px] text-muted uppercase tracking-[0.2em] font-semibold">Direct AI Consultation</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-widest">Target Model</span>
+            <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+              {models.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setModel(m.id)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${model === m.id ? 'bg-accent text-[#030712] shadow-[0_0_10px_#10b981]' : 'text-muted hover:text-text'
+                    }`}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           disabled={isStreaming}
-          placeholder="Why is the payment service throwing errors?"
+          placeholder="Translate log anomalies into actionable insights..."
           rows="4"
-          className="w-full px-4 py-3 bg-[#161b22] text-text border border-border rounded resize-none disabled:opacity-50"
+          className="w-full px-5 py-4 bg-black/40 text-text border border-white/10 rounded-2xl resize-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all outline-none text-sm leading-relaxed"
         />
 
-        <div className="flex gap-3 mt-4">
+        <div className="flex gap-4 mt-6">
           <button
             onClick={handleAsk}
             disabled={!query.trim() || isStreaming}
-            className="flex-1 px-6 py-2 bg-accent text-surface font-semibold rounded hover:opacity-90 disabled:opacity-50 transition"
+            className="flex-1 btn-primary py-3.5 uppercase tracking-[0.2em] text-xs"
           >
-            {isStreaming ? 'Analyzing...' : 'Ask AI'}
+            {isStreaming ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-2 h-2 bg-black rounded-full animate-ping" />
+                Interrogating...
+              </span>
+            ) : 'Initiate Inquiry'}
           </button>
           <button
-            onClick={handleClear}
-            className="px-6 py-2 bg-[#161b22] text-text border border-border rounded hover:border-accent transition"
+            onClick={() => { setQuery(''); setResponse(''); }}
+            className="px-8 py-3.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
           >
-            Clear
+            Reset
           </button>
         </div>
       </div>
 
-      {/* Streaming indicator */}
-      {isStreaming && (
-        <div className="flex items-center gap-2 text-accent text-sm">
-          <span>Thinking</span>
-          <span className="inline-flex gap-1">
-            <span className="inline-block w-1 h-1 bg-accent rounded-full animate-bounce"></span>
-            <span className="inline-block w-1 h-1 bg-accent rounded-full animate-bounce delay-100"></span>
-            <span className="inline-block w-1 h-1 bg-accent rounded-full animate-bounce delay-200"></span>
-          </span>
-        </div>
-      )}
-
-      {/* Response box */}
       {response && (
-        <div className="bg-surface border border-border rounded-lg p-6">
-          <h3 className="text-sm font-semibold mb-4 text-text">Response</h3>
+        <div className="glass-card !bg-black/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-accent opacity-50 shadow-[0_0_15px_#10b981]" />
+          <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-muted mb-6 flex items-center gap-2">
+            <span className="w-2 h-2 bg-accent rounded-full animate-pulse shadow-[0_0_5px_#10b981]" />
+            Intelligence Protocol Response
+          </h3>
 
           {parsed ? (
-            <div className="space-y-4 text-sm">
-              {parsed.cause && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
+              <div className="space-y-6">
                 <div>
-                  <span className="font-bold text-accent">Root Cause:</span>{' '}
-                  <span className="text-text">{parsed.cause}</span>
+                  <label className="text-[10px] font-bold text-accent uppercase tracking-widest mb-2 block">Identified Root Cause</label>
+                  <p className="text-white font-medium leading-relaxed">{parsed.cause}</p>
                 </div>
-              )}
 
-              {parsed.confidence && (
-                <div>
-                  <span className="font-semibold text-text">Confidence:</span>
-                  <span
-                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${parsed.confidence === 'HIGH'
-                        ? 'bg-green-900 text-green-200'
-                        : parsed.confidence === 'MEDIUM'
-                          ? 'bg-yellow-900 text-yellow-200'
-                          : 'bg-red-900 text-red-200'
-                      }`}
-                  >
-                    {parsed.confidence}
-                  </span>
+                <div className="flex gap-8">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2 block">Confidence Level</label>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${parsed.confidence === 'HIGH' ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5' : 'text-amber-400 border-amber-400/20 bg-amber-400/5'
+                      }`}>
+                      {parsed.confidence}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2 block">Threat Severity</label>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${parsed.severity === 'CRITICAL' ? 'text-red-400 border-red-400/20 bg-red-400/5 shadow-[0_0_10px_rgba(244,63,94,0.1)]' : 'text-orange-400 border-orange-400/20 bg-orange-400/5'
+                      }`}>
+                      {parsed.severity}
+                    </span>
+                  </div>
                 </div>
-              )}
 
-              {parsed.severity && (
                 <div>
-                  <span className="font-semibold text-text">Severity:</span>
-                  <span
-                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${parsed.severity === 'CRITICAL'
-                        ? 'bg-red-900 text-red-200'
-                        : parsed.severity === 'HIGH'
-                          ? 'bg-orange-900 text-orange-200'
-                          : 'bg-yellow-900 text-yellow-200'
-                      }`}
-                  >
-                    {parsed.severity}
-                  </span>
-                </div>
-              )}
-
-              {parsed.affected_services && Array.isArray(parsed.affected_services) && (
-                <div>
-                  <span className="font-semibold text-text">Affected Services:</span>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {parsed.affected_services.map((service, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 bg-[#161b22] text-accent rounded text-xs border border-border"
-                      >
-                        {service}
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-widest mb-3 block">Compromised Sectors</label>
+                  <div className="flex flex-wrap gap-2">
+                    {parsed.affected_services?.map((s, i) => (
+                      <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[11px] font-mono text-white/80">
+                        {s}
                       </span>
                     ))}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {parsed.recommendation && (
+              <div className="space-y-6 bg-white/[0.02] p-5 rounded-2xl border border-white/5">
                 <div>
-                  <span className="font-semibold text-text">Recommendation:</span>
-                  <p className="text-text italic mt-1">{parsed.recommendation}</p>
+                  <label className="text-[10px] font-bold text-accent uppercase tracking-widest mb-2 block">Strategic Recommendation</label>
+                  <p className="text-white/80 italic leading-relaxed text-xs">{parsed.recommendation}</p>
                 </div>
-              )}
-
-              {parsed.impact && (
                 <div>
-                  <span className="font-semibold text-text">Impact:</span>
-                  <p className="text-text mt-1">{parsed.impact}</p>
+                  <label className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2 block">Tactical Resolution</label>
+                  <p className="text-white/80 leading-relaxed text-xs">{parsed.solution}</p>
                 </div>
-              )}
-
-              {parsed.solution && (
-                <div>
-                  <span className="font-semibold text-text">Solution:</span>
-                  <p className="text-text mt-1">{parsed.solution}</p>
-                </div>
-              )}
+              </div>
             </div>
           ) : (
-            <div className="text-text whitespace-pre-wrap font-mono text-xs overflow-auto max-h-64">
-              {response}
+            <div className="ai-box font-mono text-xs leading-loose text-white/70 min-h-[100px] border-none !p-0">
+              {response.split('').map((char, i) => (
+                <span key={i} className="ai-token">{char}</span>
+              ))}
+              {isStreaming && <span className="inline-block w-1.5 h-4 bg-accent ml-1 animate-pulse" />}
             </div>
           )}
         </div>

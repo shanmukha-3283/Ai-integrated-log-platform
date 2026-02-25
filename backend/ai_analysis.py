@@ -64,44 +64,57 @@ class AIAnalyzer:
         log_ids = [self.id_map[i] for i in indices[0]]
         return log_ids
 
-    async def analyze_root_cause(self, logs):
+    async def analyze_root_cause(self, logs, model="gpt-4o"):
         """
-        Analyze logs using GPT-3.5 to determine root cause and provide solutions.
+        Analyze logs using selected AI model to determine root cause and provide solutions.
+        Supports gpt-4o, gpt-4-turbo, and gpt-3.5-turbo.
         """
         # Format logs into a string for the model
         formatted_logs = "\n\n".join([
             f"Log {i+1}:\n{log}"
-            for i, log in enumerate(logs[:5])  # Use top 5 logs
+            for i, log in enumerate(logs[:10])  # Use top 10 logs for better context
         ])
 
-        # Prepare the prompt
-        prompt = f"""
-        You are a system analyst. Analyze the following logs to determine the root cause of an issue.
-        Provide a structured response in JSON format with the following keys:
-        - cause: the root cause of the issue
-        - impact: the impact of the issue
-        - solution: the recommended solution
+        # Prepare the system and user messages for Chat API
+        messages = [
+            {"role": "system", "content": "You are a professional system reliability engineer. Analyze logs and return results strictly in JSON format."},
+            {"role": "user", "content": f"""
+            Analyze the following logs to determine the root cause, impact, and solution.
+            Return a JSON object with these keys:
+            - cause: string, the identified root cause
+            - impact: string, how this affects the system
+            - solution: string, specific steps to fix it
+            - confidence: string (HIGH/MEDIUM/LOW)
+            - severity: string (CRITICAL/HIGH/MEDIUM/LOW)
+            - affected_services: list of strings
 
-        Logs:
-        {formatted_logs}
-        """
+            Logs:
+            {formatted_logs}
+            """}
+        ]
 
-        # Call the GPT-3.5 model
-        response = self.client.completions.create(
-            model="gpt-3.5-turbo-instruct",
-            prompt=prompt,
-            max_tokens=500,
-            temperature=0.7
-        )
-
-        # Parse the response
         try:
-            analysis = json.loads(response.choices[0].text.strip())
-        except json.JSONDecodeError:
+            # Call the Chat Completion API
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={ "type": "json_object" } if model in ["gpt-4o", "gpt-4-turbo"] else None,
+                max_tokens=800,
+                temperature=0.3
+            )
+            
+            # Parse the response
+            content = response.choices[0].message.content
+            analysis = json.loads(content)
+        except Exception as e:
+            print(f"AI Analysis error with {model}: {e}")
             analysis = {
-                "cause": "Unable to determine root cause",
-                "impact": "Analysis failed",
-                "solution": "Review logs manually"
+                "cause": "Manual review required: AI analysis encountered an error.",
+                "impact": "Unconfirmed",
+                "solution": "Check service logs directly for immediate resolution.",
+                "confidence": "LOW",
+                "severity": "HIGH",
+                "affected_services": []
             }
 
         return analysis

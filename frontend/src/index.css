@@ -1,27 +1,33 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
 
 @theme {
-  --color-bg: #0d1117;
-  --color-surface: #161b22;
-  --color-border: #21262d;
-  --color-text: #e6edf3;
-  --color-muted: #8b949e;
-  --color-accent: #00d4ff;
-  --color-error: #ef4444;
+  --color-bg: #030712;
+  --color-surface: rgba(17, 24, 39, 0.7);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-text: #f9fafb;
+  --color-muted: #9ca3af;
+  --color-accent: #10b981;
+  --color-accent-glow: rgba(16, 185, 129, 0.3);
+  --color-error: #f43f5e;
   --color-warn: #f59e0b;
-  --color-success: #22c55e;
+  --color-success: #10b981;
 }
 
 @layer base {
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #21262d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #00d4ff;
-    --error: #ef4444;
+    --bg: #030712;
+    --surface: rgba(17, 24, 39, 0.7);
+    --border: rgba(255, 255, 255, 0.1);
+    --text: #f9fafb;
+    --muted: #9ca3af;
+    --accent: #10b981;
+    --accent-glow: rgba(16, 185, 129, 0.3);
+    --error: #f43f5e;
     --warn: #f59e0b;
-    --success: #22c55e;
+    --success: #10b981;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 12px;
   }
 }
