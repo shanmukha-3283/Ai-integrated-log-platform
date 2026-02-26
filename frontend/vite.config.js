@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  base: "/Ai-integrated-log-platform/",
   server: {
     port: 5173,
     proxy: {
