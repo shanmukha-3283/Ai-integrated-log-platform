@@ -1,8 +1,8 @@
-fastapi==0.111.0      # Web framework for APIs  
+fastapi>=0.110.0      # Web framework for APIs  
 uvicorn[standard]==0.29.0  # Runs FastAPI  
 pymongo==4.7.2        # Connects to MongoDB  
 motor==3.4.0          # Asynchronous MongoDB driver  
-pydantic==2.7.1       # Validates data formats  
+pydantic>=2.7.0       # Validates data formats  
 python-dotenv==1.0.1  # Loads .env file  
 openai==1.30.1        # Calls OpenAI API  
 faiss-cpu>=1.7.0      # AI library for similarity searches  
